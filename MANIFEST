@@ -1,0 +1,16 @@
+Build.PL
+Changes
+MANIFEST
+MANIFEST.SKIP
+README
+bin/deep
+lib/Log/Deep.pm
+lib/Log/Deep/Read.pm
+t/00-load.t
+t/pod-coverage.t
+t/boilerplate.t
+t/kwalitee.t
+t/spelling.t
+t/pod.t
+Makefile.PL
+META.yml
