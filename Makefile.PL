@@ -9,7 +9,6 @@ WriteMakefile
                          },
           'INSTALLDIRS' => 'site',
           'EXE_FILES' => [
-                           'bin/.deep.swp',
                            'bin/deep'
                          ]
         )
