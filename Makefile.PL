@@ -8,7 +8,13 @@ WriteMakefile
                            'Clone' => '0.29',
                            'Data::Dump::Streamer' => '2.08',
                            'Readonly' => '1.03',
+                           'Test::Kwalitee' => 0,
                            'Test::More' => 0,
+                           'Test::NoWarnings' => 0,
+                           'Test::Perl::Critic' => 0,
+                           'Test::Pod' => 0,
+                           'Test::Pod::Coverage' => 0,
+                           'Test::Spelling' => 0,
                            'Time::HiRes' => '1.9711'
                          },
           'INSTALLDIRS' => 'site',

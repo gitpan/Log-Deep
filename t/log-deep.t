@@ -2,7 +2,8 @@
 
 use strict;
 use warnings;
-use Test::More tests => 11;
+use Test::More tests => 11 + 1;
+use Test::NoWarnings;
 use Data::Dumper qw/Dumper/;
 
 use Log::Deep;
