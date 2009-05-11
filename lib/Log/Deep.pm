@@ -12,15 +12,13 @@ use version;
 use Carp qw/longmess/;
 use List::MoreUtils qw/any/;
 use Readonly;
+use Clone qw/clone/;
 use Data::Dump::Streamer;
 use POSIX qw/strftime/;
 use English qw/ -no_match_vars /;
 use base qw/Exporter/;
 
-our $VERSION     = version->new('0.0.2');
-our @EXPORT_OK   = qw//;
-our %EXPORT_TAGS = ();
-#our @EXPORT      = qw//;
+our $VERSION     = version->new('0.0.5');
 
 Readonly my @LOG_LEVELS => qw/note message debug warning error fatal/;
 
@@ -31,7 +29,7 @@ sub new {
 
 	bless $self, $class;
 
-	$self->{dump} = Data::Dump::Streamer->new()->Indent(0);
+	$self->{dump} = Data::Dump::Streamer->new()->Indent(0)->Names('DATA');
 
 	# set up log levels
 	if (!$param{-level}) {
@@ -50,6 +48,21 @@ sub new {
 
 	# set up the maximum random session id
 	$self->{rand_max} = $param{-rand_max} || 10_000;
+
+	# set up tracked variables
+	# Configuration variables - These are only recorded with calls to session()
+	$self->{vars_config}      = $param{-vars_config} || {};
+	$self->{vars_config}{ENV} = \%ENV;
+
+	# runtime varibles - These are recorded with every log message
+	$self->{vars} = $param{-vars} || {};
+
+	if ($param{-catchwarn}) {
+		# install a redirect of all warnings to $self->warning
+		$SIG{__WARN__} = sub {
+			$self->warning( $_[0] );
+		}
+	}
 
 	# check if we are starting a session or not
 	if ($param{-nosession}) {
@@ -141,7 +154,9 @@ sub fatal {
 
 	$params[0]{-level} = 'fatal';
 
-	return $self->record(@params);
+	$self->record(@params);
+
+	return exit(1);
 }
 
 sub security {
@@ -157,18 +172,33 @@ sub security {
 }
 
 sub record {
-	my ($self, $param, @message) = @_;
+	my ($self, $data, @message) = @_;
 	my $dump = $self->{dump};
 
 	# check that a session has been created
-	$self->session($param->{-session_id}) if !$self->{session_id};
+	$self->session($data->{-session_id}) if !$self->{session_id};
 
-	my $level  = $param->{-level} || '(none)';
-	delete $param->{-level};
+	my $level  = $data->{-level} || '(none)';
+	delete $data->{-level};
+
+	my $configs = $data->{-write_configs};
+	delete $data->{-write_configs};
+
+	my $param = {
+		data => $data,
+		vars => $self->{vars},
+	};
+
+	# add all the config variables to the variables to be logged
+	if ($configs) {
+		for my $var ( keys %{ $self->{vars_config} } ) {
+			$param->{vars}{$var} = $self->{vars_config}{$var};
+		}
+	}
 
 	# set up
-	$param->{-stack} = longmess;
-	$param->{-stack} =~ s/^\s+[^\n]*Log::Deep::[^\n]*\n//gxms;
+	$param->{stack} = longmess;
+	$param->{stack} =~ s/^\s+[^\n]*Log::Deep::[^\n]*\n//gxms;
 
 	my @log = (
 		strftime('%Y-%m-%d %H:%M:%S', localtime),
@@ -208,7 +238,8 @@ sub log_handle {
 		my $file = $self->{file} || "$self->{log_dir}/$self->{log_name}_$self->{log_date}.log";
 
 		open my $fh, '>>', $file or die "Could not open log file $file: $!\n";
-		$self->{handle} = $fh;
+		$self->{log_file} = $file;
+		$self->{handle}   = $fh;
 	}
 
 	return $self->{handle};
@@ -217,12 +248,14 @@ sub log_handle {
 sub session {
 	my ($self, $session_id) = @_;
 
-	return if defined $self->{log_session_count} && $self->{log_session_count} == 0;
+	if ( ! defined $session_id ) {
+		return if defined $self->{log_session_count} && $self->{log_session_count} == 0;
+	}
 
 	# use the supplied session id or create a new session id
 	$self->{session_id} = $session_id || int rand $self->{rand_max};
 
-	$self->record({-env => \%ENV}, '"START"');
+	$self->record({ -write_configs => 1 }, '"START"');
 
 	$self->{log_session_count} = 0;
 
@@ -235,7 +268,7 @@ sub level {
 	$self->{level} ||= { map { $_ => 0 } @LOG_LEVELS };
 
 	# if not called with any parameters return the level hash
-	return $self->{level} if !@level;
+	return clone $self->{level} if !@level;
 
 	# return log state if asked about that state
 	return $self->{level}{$level[1]}     if $level[0] eq '-log';
@@ -243,9 +276,17 @@ sub level {
 	# Set a log state if requested
 	return $self->{level}{$level[1]} = 1 if $level[0] eq '-set';
 
+	# Unset a log state if requested
+	return $self->{level}{$level[1]} = 0 if $level[0] eq '-unset';
+
 	# if there is only one parameter that is a single digit set the all levels of that digit and higher
 	if (@level == 1 && $level[0] =~ /^\d$/) {
-		return $self->{level} = { map {$_ => 1} @LOG_LEVELS[$level[0] .. @LOG_LEVELS-1] };
+		my $i = 0;
+		for my $log_level (@LOG_LEVELS) {
+			$self->{level}{$log_level} = $i++ >= $level[0] ? 1 : 0;
+		}
+
+		return clone $self->{level};
 	}
 
 	# if the is one parameter and it is a string turn on that level and highter
@@ -256,17 +297,14 @@ sub level {
 
 		for my $log_level (@LOG_LEVELS) {
 
-			# skip this level if it is not the starting level of higher
-			next if $log_level ne $level[0] && !$found;
-
 			# flag that we have the start level
-			$found = 1;
+			$found = 1 if $log_level eq $level[0];
 
-			# mark the current level active
-			$self->{level}{$log_level} = 1;
+			# mark the current level appropriatly
+			$self->{level}{$log_level} = $found ? 1 : 0;
 		}
 
-		return $self->{level};
+		return clone $self->{level};
 	}
 
 	# set all levels passed in as active levels.
@@ -274,7 +312,13 @@ sub level {
 		$self->{level}{$level} = 1;
 	}
 
-	return $self->{level};
+	return clone $self->{level};
+}
+
+sub file {
+	my ($self) = @_;
+
+	return $self->{log_file};
 }
 
 1;
@@ -287,7 +331,7 @@ Log::Deep - Deep Logging of information about a script state
 
 =head1 VERSION
 
-This documentation refers to Log::Deep version 0.0.2.
+This documentation refers to Log::Deep version 0.0.5.
 
 
 =head1 SYNOPSIS
@@ -444,6 +488,11 @@ Return:  -
 
 Description:
 
+=head3 C<file ( $var )>
+
+Return: string - The file name of the currently being written to log file
+
+Description: Gets the file name of the current log file
 
 =head1 DIAGNOSTICS
 

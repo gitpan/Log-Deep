@@ -12,5 +12,9 @@ t/boilerplate.t
 t/kwalitee.t
 t/spelling.t
 t/pod.t
+t/critic.t
+t/levels.t
+t/log-deep.t
+t/perlcriticrc
 Makefile.PL
 META.yml

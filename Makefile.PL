@@ -5,7 +5,11 @@ WriteMakefile
           'NAME' => 'Log::Deep',
           'VERSION_FROM' => 'lib/Log/Deep.pm',
           'PREREQ_PM' => {
-                           'Test::More' => 0
+                           'Clone' => '0.29',
+                           'Data::Dump::Streamer' => '2.08',
+                           'Readonly' => '1.03',
+                           'Test::More' => 0,
+                           'Time::HiRes' => '1.9711'
                          },
           'INSTALLDIRS' => 'site',
           'EXE_FILES' => [
