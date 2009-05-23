@@ -9,16 +9,17 @@ package Log::Deep;
 use strict;
 use warnings;
 use version;
-use Carp qw/longmess/;
+use Carp qw/croak longmess/;
 use List::MoreUtils qw/any/;
 use Readonly;
 use Clone qw/clone/;
 use Data::Dump::Streamer;
 use POSIX qw/strftime/;
+use Fcntl qw/SEEK_END/;
 use English qw/ -no_match_vars /;
 use base qw/Exporter/;
 
-our $VERSION     = version->new('0.1.0');
+our $VERSION     = version->new('0.2.0');
 
 Readonly my @LOG_LEVELS => qw/info message debug warn error fatal/;
 
@@ -153,7 +154,9 @@ sub fatal {
 
 	$self->record(@params);
 
-	return exit(1);
+	croak join ' ', @params[ 1 .. @params -1 ];
+
+	return;
 }
 
 sub security {
@@ -196,6 +199,7 @@ sub record {
 	# set up
 	$param->{stack} = longmess;
 	$param->{stack} =~ s/^\s+[^\n]*Log::Deep::[^\n]*\n//gxms;
+	$param->{stack} =~ s/\A\s at [^\n]*\n\s+//gxms;
 
 	my @log = (
 		strftime('%Y-%m-%d %H:%M:%S', localtime),
@@ -234,9 +238,23 @@ sub log_handle {
 
 		my $file = $self->{file} || "$self->{log_dir}/$self->{log_name}_$self->{log_date}.log";
 
+		# guarentee that there is a new line before we start writing
+		my $missing = 0;
+		if ( -s $file ) {
+			open my $fh, '<', $file or die "Could not open the log file $file to check that it ends in a new line: $OS_ERROR\n";
+			seek $fh, -2, SEEK_END;
+			my $end = <$fh>;
+			$missing = $end =~ /\n$/;
+			close $fh;
+		}
+
 		open my $fh, '>>', $file or die "Could not open log file $file: $!\n";
 		$self->{log_file} = $file;
 		$self->{handle}   = $fh;
+
+		if ($missing) {
+			print {$fh} "\n";
+		}
 	}
 
 	return $self->{handle};
@@ -371,6 +389,16 @@ sub catch_warnings {
 	return $self->{old_warn_handle} && 1;
 }
 
+sub DESTROY {
+	my ($self) = @_;
+
+	if ($self->{handle}) {
+		close $self->{handle};
+	}
+
+	return;
+}
+
 1;
 
 __END__
@@ -381,7 +409,7 @@ Log::Deep - Deep Logging of information about a script state
 
 =head1 VERSION
 
-This documentation refers to Log::Deep version 0.1.0.
+This documentation refers to Log::Deep version 0.2.0.
 
 
 =head1 SYNOPSIS
