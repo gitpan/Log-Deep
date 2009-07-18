@@ -1,4 +1,4 @@
-#!perl -T
+#!perl
 
 use strict;
 use warnings;
@@ -9,4 +9,12 @@ my $min_tp = 1.22;
 eval "use Test::Pod $min_tp";
 plan skip_all => "Test::Pod $min_tp required for testing POD" if $@;
 
-all_pod_files_ok();
+require Test::NoWarnings;
+Test::NoWarnings->import();
+
+my @files = all_pod_files();
+plan tests => @files + 1;
+
+for my $file (@files) {
+	pod_file_ok($file, "$file POD OK");
+}

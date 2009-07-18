@@ -19,4 +19,15 @@ if ( $EVAL_ERROR ) {
 
 my $rcfile = File::Spec->catfile( 't', 'perlcriticrc' );
 Test::Perl::Critic->import( -profile => $rcfile );
-all_critic_ok();
+require Perl::Critic::Utils;
+Perl::Critic::Utils->import(qw/all_perl_files/);
+
+require Test::NoWarnings;
+Test::NoWarnings->import();
+
+my @files = all_perl_files('bin', -d 'blib' ? 'blib' : 'lib' );
+plan tests => @files + 1;
+
+for my $file (@files) {
+	critic_ok($file, "$file POD OK");
+}

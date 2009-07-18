@@ -6,63 +6,92 @@ package Log::Deep::File;
 # $Revision$, $HeadURL$, $Date$
 # $Revision$, $Source$, $Date$
 
-use strict;
+use Moose;
 use warnings;
 use version;
 use Carp;
-use Scalar::Util;
-use List::Util;
-#use List::MoreUtils;
-use CGI;
 use Data::Dumper qw/Dumper/;
 use English qw/ -no_match_vars /;
-use base qw/Exporter/;
-use overload '""' => \&name;
+use Time::HiRes qw/sleep/;
 
-our $VERSION     = version->new('0.3.0');
+our $VERSION     = version->new('0.3.1');
 our @EXPORT_OK   = qw//;
 our %EXPORT_TAGS = ();
 
-sub new {
-	my $caller = shift;
-	my $class  = ref $caller ? ref $caller : $caller;
-	my ($name) = @_;
-	my $self   = { name => $name };
+has name => (
+	is       => 'rw',
+	isa      => 'Str',
+	required => 1,
+);
+has handle => (
+	is  => 'rw',
+	isa => 'FileHandle',
+	default => sub {
+		my ($self) = @_;
+		open my $handle, '<', $self->name or die "Could not open '" . $self->name . "': $OS_ERROR\n";
+		return $handle;
+	},
+);
+has count => (
+	is  => 'rw',
+	isa => 'Int',
+	default => 0,
+);
+require overload;
+overload->import( '""' => \&_name );
 
-	bless $self, $class;
+#after new => sub {
+#	my ($self) = @_;
+#
+#	warn Dumper \@_;
+#	my $name = $self->name();
+#	warn "here";
+#	my $ans = open my $handle, '<', $name;
+#	warn "here";
+#	$ans or die "Could not open '" . $name . "': $OS_ERROR\n";
+#	warn "here";
+#	$self->handle($handle);
+#};
 
-	open $self->{handle}, '<', $name or warn "Could not open $name: $OS_ERROR\n" and return;
-
-	return $self;
-}
+sub _name { $_[0]->name }
 
 sub line {
 	my ($self) = @_;
 
-	my $fh   = $self->{handle};
+	my $fh   = $self->handle;
 	my $line = <$fh>;
+	my $count = 0;
 
-	if ($line) {
+	if (defined $line) {
 		while ( $line !~ /\n$/xms ) {
 			# guarentee that we have a full log line, ie if we read a line before it has been completely written
 			$line .= <$fh>;
+
+			if ($count++ > 200) {
+				# give up if after 2s we still don't have a full line
+				last;
+			}
+			else {
+				# sleep a little to give the logging process time to write the rest of the line
+				sleep 0.01;
+				# reset the handle so that we can read more
+				$self->reset;
+			}
 		}
 	}
 
-	$self->{count}++;
+	$self->count($self->count + 1);
 
 	return $line;
 }
-
-sub name { $_[0]->{name} }
 
 sub reset {
 	my ($self) = @_;
 
 	# reset the file handle so that it can be read again;
-	seek $self->{handle}, 0, 1;
+	seek $self->handle, 0, 1;
 
-	$self->{count} = 0;
+	$self->count(0);
 
 	return;
 }
@@ -77,7 +106,7 @@ Log::Deep::File - Object for keeping track of info related to a log file.
 
 =head1 VERSION
 
-This documentation refers to Log::Deep::File version 0.3.0.
+This documentation refers to Log::Deep::File version 0.3.1.
 
 =head1 SYNOPSIS
 

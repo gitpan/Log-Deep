@@ -4,6 +4,10 @@ use warnings;
 use Test::More tests => 26 + 1;
 use Test::NoWarnings;
 
+# set the default log directory to somewhere that should be safe
+my $tmp = $ENV{TEMP} && -d $ENV{TEMP} ? $ENV{TEMP} : '/tmp';
+$ENV{TEMP} = q/./ if !-r $tmp || !-w $tmp;
+
 use Log::Deep;
 
 my $deep = Log::Deep->new;
@@ -73,3 +77,6 @@ $deep = Log::Deep->new( -level => 2 );
 
 $level = $deep->level;
 is_deeply( $level, { fatal=>1, error=>1, warn=>1, debug=>1, message=>0, info=>0 }, "Check that the default setup is as expected" );
+
+# remove the log file
+unlink $deep->file;
