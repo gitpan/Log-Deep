@@ -6,11 +6,12 @@ package Log::Deep::Line;
 # $Revision$, $HeadURL$, $Date$
 # $Revision$, $Source$, $Date$
 
-use Moose;
+use strict;
 use warnings;
 use version;
 use Carp;
 use Readonly;
+use Data::Dumper qw/Dumper/;
 use English qw/ -no_match_vars /;
 use base qw/Exporter/;
 use Term::ANSIColor;
@@ -29,61 +30,23 @@ Readonly my $LEVEL_COLOURS => {
 		security => '',
 	};
 
-has date => (
-	is  => 'rw',
-	isa => 'Str',
-);
-has session => (
-	is  => 'rw',
-	isa => 'Str',
-);
-has level => (
-	is  => 'rw',
-	isa => 'Str',
-);
-has message => (
-	is  => 'rw',
-	isa => 'Str',
-);
-has DATA => (
-	is  => 'rw',
-#	isa => 'Str',
-);
-has file => (
-	is  => 'rw',
-	isa => 'Log::Deep::File',
-);
-has position => (
-	is  => 'rw',
-	isa => 'Int',
-);
-has verbose => (
-	is  => 'rw',
-	isa => 'Bool',
-	default => 0,
-);
-has mono => (
-	is  => 'rw',
-	isa => 'Bool',
-	default => 0,
-);
-has fg => (
-	is  => 'rw',
-	isa => 'Str',
-);
-has bg => (
-	is  => 'rw',
-	isa => 'Str',
-);
-has dump => (
-	is  => 'rw',
-	isa => 'Data::Dump::Streamer',
-	required => 1,
-);
-has display => (
-	is  => 'rw',
-	isa => 'HashRef',
-);
+sub new {
+	my $caller = shift;
+	my $class  = ref $caller ? ref $caller : $caller;
+	my ($self, $line, $file) = @_;
+
+	if (ref $self ne 'HASH') {
+		$file = $line;
+		$line = $self;
+		$self = {};
+	}
+
+	bless $self, $class;
+
+	$self->parse($line, $file) if $line && $file;
+
+	return $self;
+}
 
 sub parse {
 	my ($self, $line, $file) = @_;
@@ -92,14 +55,14 @@ sub parse {
 	# TODO this might cause some problems if the message happens to have a \, in it
 	my @log = split /(?<!\\),/, $line, 5;
 
-	if ( @log != 5 && $self->verbose ) {
+	if ( @log != 5 && $self->{verbose} ) {
 		# get the file name and line number
-		my $name    = $file->name;
-		my $line_no = $file->handle->input_line_number;
+		my $name    = $file->{name};
+		my $line_no = $file->{handle}->input_line_number;
 
 		# output the warnings about the bad line
 		warn "The log $name line ($line_no) did not contain 4 columns! Got ". (scalar @log) . " columns\n";
-		warn $line if $self->verbose > 1;
+		warn $line if $self->{verbose} > 1;
 	}
 
 	# un-quote the individual columns
@@ -111,46 +74,46 @@ sub parse {
 
 	# re-process the data so we can display what is needed.
 	my $DATA;
-	if ( $log[-1] =~ /;$/xms ) {
+	if ( $log[-1] =~ /;$/xms && length $log[-1] < 1_000_000 ) {
 		local $SIG{__WARN__} = sub {};
 		eval $log[-1];  ## no critic
 	}
 	else {
-		warn 'There appears to be a problem with the data on line ' . $file->handle->input_line_number . "\n";
+		warn '' . (length $log[-1] < 1_000_000 ? 'The data is too large to process' : 'There appears to be a problem with the data' ) . ' on line ' . $file->{handle}->input_line_number . "\n";
 		$DATA = {};
 	}
 
-	$self->date    ( $log[0] );
-	$self->session ( $log[1] );
-	$self->level   ( $log[2] );
-	$self->message ( $log[3] );
-	$self->DATA    ( $DATA );
+	$self->{date}    = $log[0];
+	$self->{session} = $log[1];
+	$self->{level}   = $log[2];
+	$self->{message} = $log[3];
+	$self->{DATA}    = $DATA;
 
-	$self->file    ( $file );
-	$self->position( $file->handle ? tell $file->handle : 0 );
+	$self->{file}     = $file;
+	$self->{position} = $file->{handle} ? tell $file->{handle} : 0;
 
 	return $self;
 }
 
-sub id { $_[0]->session };
+sub id { $_[0]->{session} };
 
 sub colour {
 	my ($self, $colour) = @_;
 
 	if ($colour) {
 		my ($foreground, $background) = $colour =~ /^ ( \w+ ) \s+ on_ ( \w+ ) $/xms;
-		$self->fg($foreground);
-		$self->bg($background);
+		$self->{fg} = $foreground;
+		$self->{bg} = $background;
 	}
 
-	return $self->fg . ' on_' . $self->bg;
+	return "$self->{fg} on_$self->{bg}";
 }
 
 sub show {
 	my ($self) = @_;
 
 	# TODO add real filtering body here
-	return 0 if !$self->date || !$self->session;
+	return 0 if !$self->{date} || !$self->{session};
 
 	return 1;
 }
@@ -159,42 +122,42 @@ sub text {
 	my ($self) = @_;
 	my $out = '';
 
-#	my $last = $self->last_line_time || 0;
+#	my $last = $self->{last_line_time} || 0;
 #	my $now  = time;
 #
 #	# check if we are putting line breaks when there is a large time between followed file output
-#	if ( $self->breaks && $now > $last + $self->short_break ) {
-#		my $lines = $now > $last + $self->long_break ? $self->long_lines : $self->short_lines;
+#	if ( $self->{breaks} && $now > $last + $self->{short_break} ) {
+#		my $lines = $now > $last + $self->{long_break} ? $self->{long_lines} : $self->{short_lines};
 #		$out .= "\n" x $lines;
 #	}
-#	$self->last_line_time = $now;
+#	$self->{last_line_time} = $now;
 
 	# construct the log line determining colours to use etc
-	my $level = $self->mono ? $self->level : colored $self->level, $LEVEL_COLOURS->{$self->level};
-	$out .= $self->mono ? '' : color $self->colour();
-	$out .= '[' . $self->date . ']';
+	my $level = $self->{mono} ? $self->{level} : colored $self->{level}, $LEVEL_COLOURS->{$self->{level}};
+	$out .= $self->{mono} ? '' : color $self->colour();
+	$out .= "[$self->{date}]";
 
-	if ( !$self->verbose ) {
+	if ( !$self->{verbose} ) {
 		# add the session id if the user cares
-		$out .= ' ' . $self->session;
+		$out .= " $self->{session}";
 	}
-	if ( !$self->mono ) {
+	if ( !$self->{mono} ) {
 		# reset the colour if we are not in mono
 		$out .= color 'reset';
 	}
 
 	# finish constructing the log line
-	$out .= " $level - " . $self->message . "\n";
+	$out .= " $level - $self->{message}\n";
 
 	return $out;
 }
 
 sub data {
 	my ($self) = @_;
-	my $display = $self->display;
+	my $display = $self->{display};
 	my @fields;
 	my @out;
-	my $data = $self->DATA;
+	my $data = $self->{DATA};
 
 	$display->{data} = defined $display->{data} ? $display->{data} : 1;
 
@@ -206,7 +169,7 @@ sub data {
 			: !defined $data->{$field}                                     ? data_missing($field, $data)
 			: ref $display->{$field} eq 'ARRAY' || $display->{$field} ne 1 ? data_sub_fields($field, $data->{$field})
 			: !ref $data->{$field}                                         ? data_scalar($field, $data->{$field})
-			: $field ne 'data' || %{ $data->{$field} }                     ? $self->dump->Names($field)->Data($data->{$field})->Out()
+			: $field ne 'data' || %{ $data->{$field} }                     ? $self->{dump}->Names($field)->Data($data->{$field})->Out()
 			:                                                                ();
 	}
 
@@ -215,13 +178,14 @@ sub data {
 
 sub data_missing {
 	my ( $self, $field, $data ) = @_;
+	return if ref $field;
 	return if $field eq 'data';
 	return "\$$field = " . (exists $data->{field} ? 'undef' : 'missing') . "\n";
 }
 
 sub data_sub_fields {
 	my ( $self, $field, $data ) = @_;
-	my $display = $self->display;
+	my $display = $self->{display};
 	my @out;
 
 	# select the specified sub keys of $field
@@ -232,7 +196,7 @@ sub data_sub_fields {
 
 	# out put each named sub field of $field
 	for my $sub_field ( @{ $display->{$field} } ) {
-		push @out, $self->dump->Names( $field . '_' . $sub_field )->Data( $data->{$sub_field} )->Out();
+		push @out, $self->{dump}->Names( $field . '_' . $sub_field )->Data( $data->{$sub_field} )->Out();
 	}
 
 	return @out;

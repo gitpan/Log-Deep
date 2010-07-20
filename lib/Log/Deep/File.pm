@@ -6,59 +6,37 @@ package Log::Deep::File;
 # $Revision$, $HeadURL$, $Date$
 # $Revision$, $Source$, $Date$
 
-use Moose;
+use strict;
 use warnings;
 use version;
-use Carp;
+use Carp qw/carp croak confess/;
 use Data::Dumper qw/Dumper/;
 use English qw/ -no_match_vars /;
+use base qw/Exporter/;
+use overload '""' => \&name;
 use Time::HiRes qw/sleep/;
 
 our $VERSION     = version->new('0.3.1');
 our @EXPORT_OK   = qw//;
 our %EXPORT_TAGS = ();
 
-has name => (
-	is       => 'rw',
-	isa      => 'Str',
-	required => 1,
-);
-has handle => (
-	is  => 'rw',
-	isa => 'FileHandle',
-	default => sub {
-		my ($self) = @_;
-		open my $handle, '<', $self->name or die "Could not open '" . $self->name . "': $OS_ERROR\n";
-		return $handle;
-	},
-);
-has count => (
-	is  => 'rw',
-	isa => 'Int',
-	default => 0,
-);
-require overload;
-overload->import( '""' => \&_name );
+sub new {
+	my $caller = shift;
+	my $class  = ref $caller ? ref $caller : $caller;
+	my ($name) = @_;
+	my $self   = { name => $name };
 
-#after new => sub {
-#	my ($self) = @_;
-#
-#	warn Dumper \@_;
-#	my $name = $self->name();
-#	warn "here";
-#	my $ans = open my $handle, '<', $name;
-#	warn "here";
-#	$ans or die "Could not open '" . $name . "': $OS_ERROR\n";
-#	warn "here";
-#	$self->handle($handle);
-#};
+	bless $self, $class;
 
-sub _name { $_[0]->name }
+	open $self->{handle}, '<', $name or warn "Could not open $name: $OS_ERROR\n" and return;
+
+	return $self;
+}
 
 sub line {
 	my ($self) = @_;
 
-	my $fh   = $self->handle;
+	my $fh   = $self->{handle};
 	my $line = <$fh>;
 	my $count = 0;
 
@@ -80,18 +58,20 @@ sub line {
 		}
 	}
 
-	$self->count($self->count + 1);
+	$self->{count}++;
 
 	return $line;
 }
+
+sub name { $_[0]->{name} }
 
 sub reset {
 	my ($self) = @_;
 
 	# reset the file handle so that it can be read again;
-	seek $self->handle, 0, 1;
+	seek $self->{handle}, 0, 1;
 
-	$self->count(0);
+	$self->{count} = 0;
 
 	return;
 }

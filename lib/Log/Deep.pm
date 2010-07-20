@@ -200,9 +200,10 @@ sub record {
 	}
 
 	# set up
-	$param->{stack} = longmess;
+	$param->{stack} = substr longmess, 0, 1_000;
 	$param->{stack} =~ s/^\s+[^\n]*Log::Deep::[^\n]*\n//gxms;
 	$param->{stack} =~ s/\A\s at [^\n]*\n\s+//gxms;
+	$param->{stack} =~ s/\n[^\n]+\Z/\n.../xms;
 
 	my @log = (
 		strftime('%Y-%m-%d %H:%M:%S', localtime),
@@ -234,7 +235,7 @@ sub log_handle {
 	my $self = shift;
 
 	if ( !$self->{handle} ) {
-		$self->{log_dir}  ||= $ENV{TEMP} && -d $ENV{TEMP} ? $ENV{TEMP} : '/tmp';
+		$self->{log_dir}  ||= '/tmp';
 		$self->{log_name} ||= (split m{/}, $0)[-1] || 'deep';
 		$self->{date_fmt} ||= '%Y-%m-%d';
 		$self->{log_date}   = strftime $self->{date_fmt}, localtime;

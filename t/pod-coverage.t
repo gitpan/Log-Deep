@@ -5,9 +5,8 @@ use warnings;
 use Test::More;
 
 if ( not $ENV{TEST_AUTHOR} ) {
-	my $msg = 'Author test.  Set TEST_AUTHOR environment variable to a true value to run.';
-	plan( skip_all => $msg );
-	exit;
+    my $msg = 'Author test.  Set TEST_AUTHOR environment variable to a true value to run.';
+    plan( skip_all => $msg );
 }
 
 # Ensure a recent version of Test::Pod::Coverage
@@ -23,12 +22,4 @@ eval "use Pod::Coverage $min_pc";
 plan skip_all => "Pod::Coverage $min_pc required for testing POD coverage"
     if $@;
 
-require Test::NoWarnings;
-Test::NoWarnings->import();
-
-my @files = all_modules();
-plan tests => @files + 1;
-
-for my $file (@files) {
-	pod_coverage_ok($file, "$file POD OK");
-}
+all_pod_coverage_ok();

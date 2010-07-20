@@ -11,10 +11,6 @@ use Data::Dumper qw/Dumper/;
 use File::Slurp qw/slurp/;
 use Log::Deep;
 
-# set the default log directory to somewhere that should be safe
-my $tmp = $ENV{TEMP} && -d $ENV{TEMP} ? $ENV{TEMP} : '/tmp';
-$ENV{TEMP} = q/./ if !-r $tmp || !-w $tmp;
-
 my $deep = Log::Deep->new();
 isa_ok( $deep, 'Log::Deep', 'Can create a log object');
 
@@ -136,6 +132,3 @@ sub log_length {
 
 	return scalar @lines;
 }
-
-# remove the log file
-unlink $deep->file;

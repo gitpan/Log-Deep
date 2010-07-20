@@ -55,10 +55,10 @@ sub new {
 
 	$self->{line} = {
 		verbose => $self->{verbose},
+		display => $self->{display},
+		show    => $self->{show},
 		dump    => $self->{dump},
 	};
-	$self->{line}{display} = $self->{display} if defined $self->{display};
-	$self->{line}{show   } = $self->{show}    if defined $self->{show}   ;
 
 	delete $self->{show};
 	delete $self->{display};
@@ -82,8 +82,7 @@ sub read_files {
 		next if !@files || $warn;
 
 		for my $file (sort @files) {
-			$files{$file} ||= Log::Deep::File->new(name => $file);
-			warn $file;
+			$files{$file} ||= Log::Deep::File->new($file);
 		}
 	}
 	die "No files to read!" if !keys %files;
@@ -108,7 +107,7 @@ sub read_files {
 
 			# process the file for any (new) log lines
 			$lines += $self->read_file($files{$file});
-			if ( !$files{$file}->handle ) {
+			if ( !$files{$file}->{handle} ) {
 				# delete the file if there was nothing to read
 				delete $files{$file};
 			}
@@ -160,6 +159,8 @@ sub read_file {
 	my %sessions;
 	my $line_count = 0;
 
+	confess "read_file called with out a file object!" if !ref $file;
+
 	# read the rest of the lines in the file
 	LINE:
 	while (my $line = $file->line) {
@@ -169,7 +170,7 @@ sub read_file {
 		$line_count++;
 
 		# parse the line
-		my $line = Log::Deep::Line->new( $self->{line} )->parse( $line, $file );
+		my $line = Log::Deep::Line->new( { %{ $self->{line} } }, $line, $file );
 
 		# skip lines that don't have a session id
 		next LINE if !$line->id;
@@ -241,7 +242,7 @@ sub read_file {
 
 	$file->reset;
 
-	return $file->handle;
+	return $file->{handle};
 }
 
 sub read {
@@ -251,7 +252,7 @@ sub read {
 	my $file = $self->{file};
 
 	if (!ref $file) {
-		$file = $self->{file} = Log::Deep::File->new(name => $file);
+		$file = $self->{file} = Log::Deep::File->new($file);
 	}
 
 	my $line = $file->line;
@@ -265,7 +266,7 @@ sub read {
 	return $self->read() if !$line;
 
 	# parse the line
-	$line = Log::Deep::Line->new( $self->{line} )->parse( $line, $file );
+	$line = Log::Deep::Line->new( { %{ $self->{line} } }, $line, $file );
 	$line->colour( $self->session_colour($line->id) );
 
 	# skip displaying the line if it should be filtered out
