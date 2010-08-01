@@ -19,7 +19,7 @@ use Fcntl qw/SEEK_END/;
 use English qw/ -no_match_vars /;
 use base qw/Exporter/;
 
-our $VERSION     = version->new('0.3.1');
+our $VERSION     = version->new('0.3.2');
 
 Readonly my @LOG_LEVELS => qw/info message debug warn error fatal/;
 
@@ -235,7 +235,7 @@ sub log_handle {
 	my $self = shift;
 
 	if ( !$self->{handle} ) {
-		$self->{log_dir}  ||= '/tmp';
+		$self->{log_dir}  ||= $ENV{TMP} || '/tmp';
 		$self->{log_name} ||= (split m{/}, $0)[-1] || 'deep';
 		$self->{date_fmt} ||= '%Y-%m-%d';
 		$self->{log_date}   = strftime $self->{date_fmt}, localtime;
@@ -252,7 +252,7 @@ sub log_handle {
 			close $fh;
 		}
 
-		open my $fh, '>>', $file or die "Could not open log file $file: $!\n";
+		open my $fh, '>>', $file or die "Could not open log file $file: $OS_ERROR\n";
 		$self->{file}   = $file;
 		$self->{handle} = $fh;
 
@@ -425,7 +425,7 @@ Log::Deep - Deep Logging of information about a script state
 
 =head1 VERSION
 
-This documentation refers to Log::Deep version 0.3.1.
+This documentation refers to Log::Deep version 0.3.2.
 
 
 =head1 SYNOPSIS
